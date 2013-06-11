@@ -1,3 +1,9 @@
+Original author: Kan-Ru Chen
+
+This patch is slightly modified in order to patch against rxvt-unicode-9.18,
+the original patch for 9.14 can be found here:
+http://github.com/hime-ime/hime/blob/master/distro/dev-tools/patches/rxvt-unicode-9.14.diff
+
 diff -rupN rxvt-unicode-9.18/README.hime rxvt-unicode-9.18-patched/README.hime
 --- rxvt-unicode-9.18/README.hime	1970-01-01 08:00:00.000000000 +0800
 +++ rxvt-unicode-9.18-patched/README.hime	2013-06-10 22:45:55.400506030 +0800
@@ -50,16 +56,16 @@ diff -rupN rxvt-unicode-9.18/src/command.C rxvt-unicode-9.18-patched/src/command
 -#if (MOUSE_WHEEL && MOUSE_SLIP_WHEELING) || ISO_14755 || ENABLE_PERL
 +#ifdef USE_HIME
    KeySym keysym;
- 
+
    keysym = XLookupKeysym (&ev, ev.state & ShiftMask ? 1 : 0); // sorry, only shift supported :/
 +  char *rstr = NULL;
 +  hime_im_client_forward_key_release (Hime_Handle, keysym, ev.state, &rstr);
 +  free (rstr);
  #endif
- 
+
  #if ENABLE_FRILLS || ISO_14755
 @@ -993,7 +1026,7 @@ rxvt_term::flush ()
- 
+
        scr_refresh ();
        scrollBar.show (1);
 -#if USE_XIM
@@ -96,7 +102,7 @@ diff -rupN rxvt-unicode-9.18/src/command.C rxvt-unicode-9.18-patched/src/command
          cursor_blink_ev.stop ();
 @@ -4073,4 +4119,3 @@ void rxvt_term::pty_write ()
  }
- 
+
  /*----------------------- end-of-file (C source) -----------------------*/
 -
 diff -rupN rxvt-unicode-9.18/src/init.C rxvt-unicode-9.18-patched/src/init.C
@@ -105,14 +111,14 @@ diff -rupN rxvt-unicode-9.18/src/init.C rxvt-unicode-9.18-patched/src/init.C
 @@ -987,7 +987,7 @@ rxvt_term::init_xlocale ()
  {
    set_environ (envv);
- 
+
 -#if USE_XIM
 +#if USE_HIME
    if (!locale)
      rxvt_warn ("setting locale failed, continuing without locale support.\n");
    else
 @@ -1447,7 +1447,7 @@ rxvt_term::create_windows (int argc, con
- 
+
    XSelectInput (dpy, top,
                  KeyPressMask
 -#if (MOUSE_WHEEL && MOUSE_SLIP_WHEELING) || ENABLE_FRILLS || ISO_14755
@@ -127,7 +133,7 @@ diff -rupN rxvt-unicode-9.18/src/init.C rxvt-unicode-9.18-patched/src/init.C
 +#ifdef USE_HIME
 +	    close (Hime_Handle->fd);
 +#endif
- 
+
              run_child (argv);
              fprintf (stderr, "%s: unable to exec child.", RESNAME);
 diff -rupN rxvt-unicode-9.18/src/main.C rxvt-unicode-9.18-patched/src/main.C
@@ -143,7 +149,7 @@ diff -rupN rxvt-unicode-9.18/src/main.C rxvt-unicode-9.18-patched/src/main.C
  #endif
  #ifdef POINTER_BLANK
 @@ -316,7 +316,7 @@ rxvt_term::destroy ()
- 
+
    if (display)
      {
 -#if USE_XIM
@@ -157,13 +163,13 @@ diff -rupN rxvt-unicode-9.18/src/main.C rxvt-unicode-9.18-patched/src/main.C
   * -------------------------------------------------------------------- */
 -#if USE_XIM
 +#if USE_HIME
- 
+
  void
  rxvt_term::im_set_color (unsigned long &fg, unsigned long &bg)
 @@ -1225,6 +1225,11 @@ rxvt_term::im_is_running ()
    Window win;
    char server[IMBUFSIZ];
- 
+
 +#ifdef USE_HIME
 +  if (Hime_Handle)
 +    return True;
@@ -177,24 +183,24 @@ diff -rupN rxvt-unicode-9.18/src/main.C rxvt-unicode-9.18-patched/src/main.C
          return true;
      }
 +#endif
- 
+
    return false;
  }
 @@ -1250,9 +1256,7 @@ rxvt_term::im_send_spot ()
    XPoint nspot;
    XVaNestedList preedit_attr;
- 
+
 -  if (!Input_Context
 -      || !focus
 -      || !(input_style & (XIMPreeditPosition | XIMPreeditCallbacks)))
 +  if (!focus || !Hime_Handle)
      return;
- 
+
    im_set_position (nspot);
 @@ -1262,11 +1266,13 @@ rxvt_term::im_send_spot ()
- 
+
    spot = nspot;
- 
+
 -  preedit_attr = XVaCreateNestedList (0, XNSpotLocation, &spot, NULL);
 -  XSetICValues (Input_Context, XNPreeditAttributes, preedit_attr, NULL);
 -  XFree (preedit_attr);
@@ -203,19 +209,19 @@ diff -rupN rxvt-unicode-9.18/src/main.C rxvt-unicode-9.18-patched/src/main.C
 +      hime_im_client_set_cursor_location(Hime_Handle, nspot.x, nspot.y);
 +#endif
  }
- 
+
 +#ifdef USE_XIM
  void
  rxvt_term::im_destroy ()
  {
 @@ -1281,6 +1287,7 @@ rxvt_term::im_destroy ()
- 
+
    Input_Context = 0;
  }
 +#endif
- 
+
  #ifdef ENABLE_XIM_ONTHESPOT
- 
+
 @@ -1363,6 +1370,10 @@ xim_preedit_caret (XIC ic, XPointer clie
  bool
  rxvt_term::im_get_ic (const char *modifiers)
@@ -229,10 +235,10 @@ diff -rupN rxvt-unicode-9.18/src/main.C rxvt-unicode-9.18-patched/src/main.C
    XPoint spot;
 @@ -1570,6 +1581,7 @@ foundpet:
  #endif
- 
+
    im_set_position ();
 +#endif
- 
+
    return true;
  }
 @@ -1577,6 +1589,7 @@ foundpet:
@@ -248,24 +254,24 @@ diff -rupN rxvt-unicode-9.18/src/main.C rxvt-unicode-9.18-patched/src/main.C
          goto done;
      }
 +#endif
- 
+
    /* try with XMODIFIERS env. var. */
    if (im_get_ic (""))
 @@ -1632,6 +1646,7 @@ done:
      SET_LOCALE (locale);
  }
- 
+
 +#ifdef USE_XIM
  void
  rxvt_term::im_set_position ()
  {
 @@ -1675,6 +1690,7 @@ rxvt_term::im_set_position ()
- 
+
     XFree (preedit_attr);
  }
 +#endif
  #endif /* USE_XIM */
- 
+
  void
 diff -rupN rxvt-unicode-9.18/src/Makefile.in rxvt-unicode-9.18-patched/src/Makefile.in
 --- rxvt-unicode-9.18/src/Makefile.in	2013-03-24 22:39:21.000000000 +0800
@@ -287,7 +293,7 @@ diff -rupN rxvt-unicode-9.18/src/rxvt.h rxvt-unicode-9.18-patched/src/rxvt.h
 @@ -90,6 +90,10 @@ typedef  int32_t tlen_t_; // specificall
  # endif
  #endif
- 
+
 +#ifdef USE_HIME
 +# include <hime-im-client.h>
 +#endif
@@ -302,7 +308,7 @@ diff -rupN rxvt-unicode-9.18/src/rxvt.h rxvt-unicode-9.18-patched/src/rxvt.h
 +#endif
 +#ifdef USE_HIME
    XPoint   spot; // most recently sent spot position
- 
+
    void im_destroy ();
 @@ -1362,6 +1368,9 @@ struct rxvt_term : zero_initialized, rxv
    bool im_get_ic (const char *modifiers);
@@ -311,12 +317,12 @@ diff -rupN rxvt-unicode-9.18/src/rxvt.h rxvt-unicode-9.18-patched/src/rxvt.h
 +#ifdef USE_HIME
 +  HIME_client_handle *Hime_Handle;
 +#endif
- 
+
    // command.C
    void key_press (XKeyEvent &ev);
 @@ -1570,4 +1579,3 @@ struct rxvt_term : zero_initialized, rxv
  };
- 
+
  #endif /* _RXVT_H_ */
 -
 diff -rupN rxvt-unicode-9.18/src/rxvttoolkit.C rxvt-unicode-9.18-patched/src/rxvttoolkit.C
@@ -337,7 +343,7 @@ diff -rupN rxvt-unicode-9.18/src/rxvttoolkit.C rxvt-unicode-9.18-patched/src/rxv
 @@ -565,13 +567,15 @@ rxvt_display::~rxvt_display ()
    XCloseDisplay (dpy);
  }
- 
+
 -#if USE_XIM
 +#if USE_HIME
  void rxvt_display::im_change_cb ()
@@ -346,7 +352,7 @@ diff -rupN rxvt-unicode-9.18/src/rxvttoolkit.C rxvt-unicode-9.18-patched/src/rxv
      (*i)->call ();
  }
 +#endif
- 
+
 +#ifdef USE_XIM
  void rxvt_display::im_change_check ()
  {
@@ -354,10 +360,10 @@ diff -rupN rxvt-unicode-9.18/src/rxvttoolkit.C rxvt-unicode-9.18-patched/src/rxv
 @@ -670,7 +674,7 @@ void rxvt_display::set_selection_owner (
    cur_owner = owner;
  }
- 
+
 -#if USE_XIM
 +#if USE_HIME
- 
+
  void rxvt_display::reg (im_watcher *w)
  {
 @@ -681,7 +685,9 @@ void rxvt_display::unreg (im_watcher *w)
@@ -365,7 +371,7 @@ diff -rupN rxvt-unicode-9.18/src/rxvttoolkit.C rxvt-unicode-9.18-patched/src/rxv
    imw.erase (find (imw.begin (), imw.end (), w));
  }
 +#endif
- 
+
 +#ifdef USE_XIM
  rxvt_xim *rxvt_display::get_xim (const char *locale, const char *modifiers)
  {
@@ -386,35 +392,35 @@ diff -rupN rxvt-unicode-9.18/src/rxvttoolkit.h rxvt-unicode-9.18-patched/src/rxv
  #endif
  #if BG_IMAGE_FROM_ROOT || ENABLE_PERL
 @@ -234,9 +236,13 @@ struct rxvt_display : refcounted
- 
+
  #if USE_XIM
    refcache<rxvt_xim> xims;
 +#endif
 +#ifdef USE_HIME
    vector<im_watcher *> imw;
- 
+
    void im_change_cb ();
 +#endif
 +#ifdef USE_XIM
    void im_change_check ();
  #endif
- 
+
 @@ -271,16 +277,18 @@ struct rxvt_display : refcounted
    void reg (xevent_watcher *w);
    void unreg (xevent_watcher *w);
- 
+
 -#if USE_XIM
 +#if USE_HIME
    void reg (im_watcher *w);
    void unreg (im_watcher *w);
 +#endif
- 
+
 +#ifdef USE_XIM
    rxvt_xim *get_xim (const char *locale, const char *modifiers);
    void put_xim (rxvt_xim *xim);
  #endif
  };
- 
+
 -#if USE_XIM
 +#if USE_HIME
  struct im_watcher : rxvt_watcher, callback<void (void)>
@@ -422,7 +428,7 @@ diff -rupN rxvt-unicode-9.18/src/rxvttoolkit.h rxvt-unicode-9.18-patched/src/rxv
    void start (rxvt_display *display)
 @@ -411,4 +419,3 @@ private:
  };
- 
+
  #endif
 -
 diff -rupN rxvt-unicode-9.18/src/screen.C rxvt-unicode-9.18-patched/src/screen.C
@@ -430,7 +436,7 @@ diff -rupN rxvt-unicode-9.18/src/screen.C rxvt-unicode-9.18-patched/src/screen.C
 +++ rxvt-unicode-9.18-patched/src/screen.C	2013-06-10 22:52:36.649484410 +0800
 @@ -3551,7 +3551,7 @@ rxvt_term::selection_send (const XSelect
  }
- 
+
  /* ------------------------------------------------------------------------- */
 -#if USE_XIM
 +#if USE_HIME
@@ -438,7 +444,7 @@ diff -rupN rxvt-unicode-9.18/src/screen.C rxvt-unicode-9.18-patched/src/screen.C
  rxvt_term::im_set_position (XPoint &pos) NOTHROW
  {
 @@ -3703,4 +3703,3 @@ rxvt_term::scr_swap_overlay () NOTHROW
- 
+
  #endif
  /* ------------------------------------------------------------------------- */
 -
